@@ -1,213 +1,333 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 MQTT 科技控制面板</title>
-    <!-- 引入 Paho MQTT 函式庫 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
-    <style>
-        /* --- 科技感暗色 UI 樣式 --- */
-        body {
-            background-color: #0d1117;
-            color: #c9d1d9;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 AFG Monitor 即時監控</title>
+  <!-- 引入 MQTT.js 函式庫 -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
 
-        h1 {
-            color: #58a6ff;
-            text-shadow: 0 0 15px rgba(88, 166, 255, 0.6);
-            letter-spacing: 2px;
-            margin-bottom: 30px;
-        }
+    body {
+      background-color: #f0f2f5;
+      color: #1f2937;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
 
-        /* 磨砂玻璃感容器 */
-        .container {
-            background: rgba(22, 27, 34, 0.8);
-            border: 1px solid #30363d;
-            border-radius: 15px;
-            padding: 30px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(4px);
-            width: 90%;
-            max-width: 450px;
-        }
+    .container {
+      width: 100%;
+      max-width: 640px;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      padding: 28px;
+    }
 
-        .control-group {
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #30363d;
-        }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e5e7eb;
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }
 
-        h3 {
-            color: #8b949e;
-            font-size: 14px;
-            text-transform: uppercase;
-            margin-bottom: 20px;
-            letter-spacing: 1px;
-        }
+    .header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #111827;
+    }
 
-        /* 按鈕基礎樣式 */
-        button {
-            background: transparent;
-            border: 2px solid #58a6ff;
-            color: #58a6ff;
-            padding: 12px 20px;
-            font-size: 14px;
-            font-weight: bold;
-            border-radius: 8px;
-            cursor: pointer;
-            margin: 5px;
-            transition: all 0.3s ease;
-            outline: none;
-            text-transform: uppercase;
-        }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background-color: #fef3c7;
+      color: #92400e;
+    }
 
-        /* 各種按鈕顏色微調 */
-        button.btn-on:hover { background: #58a6ff; color: #0d1117; box-shadow: 0 0 20px rgba(88, 166, 255, 0.4); }
-        
-        button.btn-off { border-color: #8b949e; color: #8b949e; }
-        button.btn-off:hover { background: #8b949e; color: #0d1117; box-shadow: 0 0 20px rgba(139, 148, 158, 0.4); }
+    .status-badge.connected {
+      background-color: #d1fae5;
+      color: #065f46;
+    }
 
-        button.btn-blink { border-color: #f1e05a; color: #f1e05a; }
-        button.btn-blink:hover { background: #f1e05a; color: #0d1117; box-shadow: 0 0 20px rgba(241, 224, 90, 0.4); }
+    .status-badge.disconnected {
+      background-color: #fee2e2;
+      color: #991b1b;
+    }
 
-        button:active { transform: scale(0.95); }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: currentColor;
+    }
 
-        /* 終端機狀態框 */
-        .status-box {
-            background: #010409;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            padding: 15px;
-            margin-top: 10px;
-            text-align: left;
-            min-height: 50px;
-        }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-bottom: 16px;
+    }
 
-        .status {
-            font-size: 16px;
-            font-family: 'Courier New', Courier, monospace;
-            color: #7ee787;
-            text-shadow: 0 0 5px rgba(126, 231, 135, 0.3);
-        }
+    .card {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 20px;
+      transition: transform 0.15s ease, border-color 0.2s ease;
+    }
 
-        /* 連線燈號 */
-        #connCircle {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background-color: #ff7b72;
-            margin-right: 10px;
-            transition: 0.5s;
-        }
+    .card.full-width {
+      grid-column: span 2;
+    }
 
-        .connected {
-            background-color: #7ee787 !important;
-            box-shadow: 0 0 10px #7ee787;
-        }
-    </style>
+    .card.flash {
+      border-color: #3b82f6;
+    }
+
+    .card-label {
+      font-size: 0.9rem;
+      color: #6b7280;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .card-value {
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: #111827;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .card-unit {
+      font-size: 1.1rem;
+      font-weight: 500;
+      color: #6b7280;
+      margin-left: 4px;
+    }
+
+    .vpp-color { color: #2563eb; }
+    .offset-color { color: #059669; }
+    .adc-color { color: #4b5563; font-size: 1.8rem; }
+
+    /* ADC 視覺化進度條 */
+    .adc-bar-bg {
+      width: 100%;
+      height: 10px;
+      background-color: #e5e7eb;
+      border-radius: 5px;
+      margin-top: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .adc-bar-range {
+      position: absolute;
+      top: 0;
+      height: 100%;
+      background-color: #3b82f6;
+      border-radius: 5px;
+      transition: left 0.2s ease, width 0.2s ease;
+    }
+
+    .adc-scale {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: #9ca3af;
+      margin-top: 4px;
+    }
+
+    .footer {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 0.85rem;
+      color: #6b7280;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .footer-row {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    code {
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      color: #374151;
+    }
+
+    @media (max-width: 480px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      .card.full-width {
+        grid-column: span 1;
+      }
+    }
+  </style>
 </head>
 <body>
 
-    <h1><span id="connCircle"></span>ESP32 TERMINAL</h1>
-    
-    <div class="container">
-        <!-- LED 控制區 -->
-        <div class="control-group">
-            <h3>LED Actuator Control</h3>
-            <button class="btn-on" onclick="sendLedCommand('ON')">Power On</button>
-            <button class="btn-off" onclick="sendLedCommand('OFF')">Power Off</button>
-            <button class="btn-blink" onclick="sendLedCommand('BLINK')">Blink Mode</button>
-        </div>
-
-        <!-- 狀態顯示區 -->
-        <div>
-            <h3>System Logs / Sensor Data</h3>
-            <div class="status-box">
-                <div class="status" id="buttonStatus">INITIATING SYSTEM...</div>
-            </div>
-        </div>
+  <div class="container">
+    <div class="header">
+      <h1>ESP32 AFG Monitor</h1>
+      <div id="status-badge" class="status-badge">
+        <span class="dot"></span>
+        <span id="status-text">連線中...</span>
+      </div>
     </div>
 
-    <script>
-        /* --- MQTT 連線設定 --- */
-        const broker = "broker.emqx.io";
-        const port = 8084; // 使用 WSS (WebSocket Secure)
-        const clientId = "web_client_" + Math.random().toString(16).substr(2, 8);
-        
-        const topicLedControl = "loneya_home/esp32/led";
-        const topicButtonStatus = "loneya_home/esp32/button";
+    <div class="grid">
+      <!-- 峰對峰電壓 Vpp -->
+      <div class="card" id="card-vpp">
+        <div class="card-label">峰對峰電壓 (Vpp)</div>
+        <div>
+          <span class="card-value vpp-color" id="vpp">--</span>
+          <span class="card-unit">V</span>
+        </div>
+      </div>
 
-        const client = new Paho.MQTT.Client(broker, port, clientId);
+      <!-- 直流偏移 Offset -->
+      <div class="card" id="card-offset">
+        <div class="card-label">直流偏移 (Offset)</div>
+        <div>
+          <span class="card-value offset-color" id="offset">--</span>
+          <span class="card-unit">V</span>
+        </div>
+      </div>
 
-        // 設定回呼函式
-        client.onConnectionLost = onConnectionLost;
-        client.onMessageArrived = onMessageArrived;
+      <!-- ADC 原始範圍 -->
+      <div class="card full-width" id="card-adc">
+        <div class="card-label">ADC 原始取樣範圍 (12-bit)</div>
+        <div>
+          <span class="card-value adc-color" id="adc-range">-- - --</span>
+        </div>
+        <div class="adc-bar-bg">
+          <div class="adc-bar-range" id="adc-bar" style="left: 0%; width: 0%;"></div>
+        </div>
+        <div class="adc-scale">
+          <span>0 (0V)</span>
+          <span>2048 (1.65V)</span>
+          <span>4095 (3.3V)</span>
+        </div>
+      </div>
+    </div>
 
-        const options = {
-            useSSL: true,
-            timeout: 3,
-            onSuccess: onConnect,
-            onFailure: onFailure
-        };
+    <div class="footer">
+      <div class="footer-row">
+        <span>訂閱主題 (Topic)：</span>
+        <code>iot/electrostatic/field</code>
+      </div>
+      <div class="footer-row">
+        <span>最後接收時間：</span>
+        <span id="last-update">尚未收到資料</span>
+      </div>
+    </div>
+  </div>
 
-        // 開始連線
-        console.log("Connecting to broker...");
-        client.connect(options);
+  <script>
+    // MQTT WebSocket 設定 (對應 broker.emqx.io 的 WSS 安全連接埠 8084)
+    const BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
+    const TOPIC = 'iot/electrostatic/field';
+    const CLIENT_ID = 'web-afg-viewer-' + Math.random().toString(16).substring(2, 8);
 
-        function onConnect() {
-            console.log("Connected Successfully");
-            document.getElementById("connCircle").classList.add("connected");
-            document.getElementById("buttonStatus").innerText = "> MQTT ONLINE";
-            // 訂閱按鈕狀態主題
-            client.subscribe(topicButtonStatus);
+    const statusBadge = document.getElementById('status-badge');
+    const statusText = document.getElementById('status-text');
+    const vppEl = document.getElementById('vpp');
+    const offsetEl = document.getElementById('offset');
+    const adcRangeEl = document.getElementById('adc-range');
+    const adcBarEl = document.getElementById('adc-bar');
+    const lastUpdateEl = document.getElementById('last-update');
+
+    // 建立 MQTT 連線
+    const client = mqtt.connect(BROKER_URL, {
+      clientId: CLIENT_ID,
+      clean: true,
+      reconnectPeriod: 3000
+    });
+
+    // 連線成功事件
+    client.on('connect', () => {
+      statusBadge.className = 'status-badge connected';
+      statusText.textContent = '已連線';
+      client.subscribe(TOPIC, (err) => {
+        if (err) {
+          console.error('訂閱失敗:', err);
+        }
+      });
+    });
+
+    // 斷線或錯誤事件
+    client.on('offline', () => {
+      statusBadge.className = 'status-badge disconnected';
+      statusText.textContent = '已斷線';
+    });
+
+    client.on('reconnect', () => {
+      statusBadge.className = 'status-badge';
+      statusText.textContent = '重新連線中...';
+    });
+
+    // 接收訊息並更新畫面
+    client.on('message', (topic, message) => {
+      try {
+        const data = JSON.parse(message.toString());
+
+        // 更新 Vpp 與 Offset
+        if (data.vpp !== undefined) {
+          vppEl.textContent = Number(data.vpp).toFixed(2);
+        }
+        if (data.offset !== undefined) {
+          offsetEl.textContent = Number(data.offset).toFixed(2);
         }
 
-        function onFailure(message) {
-            console.error("Connection Failed: " + message.errorMessage);
-            document.getElementById("buttonStatus").innerText = "> CONNECTION FAILED";
+        // 更新 ADC 範圍與視覺化橫條
+        if (data.adc_min !== undefined && data.adc_max !== undefined) {
+          const min = Number(data.adc_min);
+          const max = Number(data.adc_max);
+          adcRangeEl.textContent = `${min} - ${max}`;
+
+          const leftPercent = Math.max(0, Math.min(100, (min / 4095) * 100));
+          const widthPercent = Math.max(1, Math.min(100 - leftPercent, ((max - min) / 4095) * 100));
+          adcBarEl.style.left = `${leftPercent}%`;
+          adcBarEl.style.width = `${widthPercent}%`;
         }
 
-        function onConnectionLost(responseObject) {
-            document.getElementById("connCircle").classList.remove("connected");
-            document.getElementById("buttonStatus").innerText = "> CONNECTION LOST";
-            if (responseObject.errorCode !== 0) {
-                console.warn("Lost: " + responseObject.errorMessage);
-            }
-        }
+        // 更新時間戳記
+        const now = new Date();
+        lastUpdateEl.textContent = now.toLocaleTimeString('zh-TW', { hour12: false });
 
-        // 接收到 ESP32 傳來的訊息
-        function onMessageArrived(message) {
-            if (message.destinationName === topicButtonStatus) {
-                const statusEl = document.getElementById("buttonStatus");
-                // 顯示最新訊息並加上 > 符號增加科技感
-                statusEl.innerText = "> " + message.payloadString;
-                
-                // 觸發一個簡單的閃爍效果提示數據更新
-                statusEl.style.opacity = 0.5;
-                setTimeout(() => statusEl.style.opacity = 1, 100);
-            }
-        }
+        // 卡片邊框閃爍提示資料更新
+        document.querySelectorAll('.card').forEach(card => {
+          card.classList.add('flash');
+          setTimeout(() => card.classList.remove('flash'), 200);
+        });
 
-        // 發送指令給 ESP32
-        function sendLedCommand(state) {
-            if (client.isConnected()) {
-                const message = new Paho.MQTT.Message(state);
-                message.destinationName = topicLedControl;
-                client.send(message);
-                console.log("Sent Command: " + state);
-            } else {
-                alert("SYSTEM OFFLINE: Check connection");
-            }
-        }
-    </script>
+      } catch (e) {
+        console.error('JSON 解析錯誤:', e, message.toString());
+      }
+    });
+  </script>
 </body>
 </html>
